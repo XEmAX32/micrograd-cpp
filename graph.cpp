@@ -9,8 +9,17 @@ void render_node(Agraph_t* graph, const Value* current_node_value, Agnode_t* par
   ss << *current_node_value;
   char* current_node_value_name = strdup(ss.str().c_str());
 
+  float test = 0.02;
+
   Agnode_t* new_node = agnode(graph, current_node_value_name, 1);
-  agsafeset(new_node, (char*)"shape", (char*)"box", (char*)"");
+
+  std::ostringstream label_ss;
+  label_ss << "{ value: " << *current_node_value
+          << " | grad: "  << test
+          << " }";
+  char* label = strdup(label_ss.str().c_str());
+  agsafeset(new_node, (char*)"shape", (char*)"record", (char*)"");
+  agsafeset(new_node, (char*)"label", label, (char*)"");
 
   Agnode_t* operation_node = nullptr;
 
