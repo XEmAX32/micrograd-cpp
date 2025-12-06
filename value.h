@@ -5,7 +5,7 @@
 #include <set>
 
 class Value {
-public: 
+  public: 
     float data; 
     std::set<const Value*> prev; 
     char op; 
