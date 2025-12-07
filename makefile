@@ -3,8 +3,8 @@ CXXFLAGS = -Wall -O2 -I/opt/homebrew/include/graphviz
 LDFLAGS = -L/opt/homebrew/lib -lgvc -lcgraph -lcdt
 
 BUILD_DIR = build
-TARGET = $(BUILD_DIR)/graph
-OBJ = $(BUILD_DIR)/graph.o
+TARGET = $(BUILD_DIR)/main
+OBJ = $(BUILD_DIR)/main.o $(BUILD_DIR)/graph.o 
 
 all: $(TARGET)
 
