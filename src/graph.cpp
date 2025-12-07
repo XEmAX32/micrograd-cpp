@@ -9,14 +9,12 @@ static void render_node(Agraph_t* graph, const Value* current_node_value, Agnode
   ss << current_node_value;
   char* current_node_value_name = strdup(ss.str().c_str());
 
-  float test = 0.02;
-
   Agnode_t* new_node = agnode(graph, current_node_value_name, 1);
 
   std::ostringstream label_ss;
   label_ss << "{ " << current_node_value->label
           << " | value: "  << *current_node_value
-          // << " | grad: "  << test
+          << " | grad: "  << current_node_value->grad
           << " }";
   char* label = strdup(label_ss.str().c_str());
 
@@ -25,15 +23,13 @@ static void render_node(Agraph_t* graph, const Value* current_node_value, Agnode
 
   Agnode_t* operation_node = nullptr;
 
-  if(current_node_value->op) {
-    char buf[10] = { current_node_value->op, '\0' };
+  if(!current_node_value->op.empty()) {
     // make this node truly unique
-    snprintf(buf, sizeof(buf), "%c%s", current_node_value->op, current_node_value->label.c_str());
-    operation_node = agnode(graph, strdup(buf), 1);
+    char name_buffer[64];
+    snprintf(name_buffer, sizeof(name_buffer), "op_%p", (void*)current_node_value);
+    operation_node = agnode(graph, name_buffer, 1);
 
-    char operation_buffer[2] = { current_node_value->op, '\0' };
-    agsafeset(operation_node, (char*)"label", operation_buffer, (char*)"");
-
+    agsafeset(operation_node, const_cast<char*>("label"), current_node_value->op.c_str(), const_cast<char*>(""));
     agedge(graph, operation_node, new_node, 0, 1);
   }
 
