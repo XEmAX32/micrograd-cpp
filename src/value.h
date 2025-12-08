@@ -12,7 +12,7 @@ class Value {
     float data; 
     std::string label;
     std::set<const Value*> prev; 
-    std::function<void()> backward;
+    std::function<void(Value* self)> backward;
     std::string op; 
     float grad; 
 
@@ -22,7 +22,12 @@ class Value {
           std::string operation = "",
           float grad = 0.00
         )
-        : data(d), label(lab), prev(children), backward([]() {}), op(operation), grad(grad) {}
+        : data(d), label(lab), prev(children), backward([](Value* self) {}), op(operation), grad(grad) {}
+
+    static std::vector<std::unique_ptr<Value>>& pool() {
+        static std::vector<std::unique_ptr<Value>> storage;
+        return storage;
+    }
 
     friend std::ostream& operator<<(std::ostream& os, const Value& v) {
         os << v.data;
@@ -31,22 +36,37 @@ class Value {
 
     Value operator+(Value& other) {
         Value out(data + other.data, "", { this, &other }, "+", 0);
-        out.backward = [this, &out, &other]() {
+        out.backward = [this, &other](Value* self) {
             // using += so that repeatedly used node will accumulate gradient
             // same applies in other backward functions, not going to repeat comment
-            this->grad += 1.0 * out.grad;
-            other.grad += 1.0 * out.grad;
+            this->grad += 1.0 * self->grad;
+            other.grad += 1.0 * self->grad;
         };
 
         return out;
     }
 
+    // template<std::arithmetic T>
+    // Value operator+(T other) {
+    //     Value temp(other, "", {}, "", 0);
+    //     Value out(data + temp.data, "", { this, &temp }, "+", 0);
+
+    //     out.backward = [this, &out, &temp]() {
+    //         // using += so that repeatedly used node will accumulate gradient
+    //         // same applies in other backward functions, not going to repeat comment
+    //         this->grad += 1.0 * out.grad;
+    //         temp.grad += 1.0 * out.grad;
+    //     };
+
+    //     return out;
+    // }
+
     Value operator*(Value& other) {
         Value out(data * other.data, "", { this, &other }, "*", 0);
 
-        out.backward = [this, &out, &other]() {
-            this->grad += other.data * out.grad;
-            other.grad += this->data * out.grad;
+        out.backward = [this, &other](Value* self) {
+            this->grad += other.data * self->grad;
+            other.grad += this->data * self->grad;
         };
 
         return out;
@@ -56,8 +76,8 @@ class Value {
         float result = (std::exp(2 * data) - 1) / (std::exp(2 * data) + 1);
         Value out(result, "", { this }, "tanh", 0);
 
-        out.backward = [this, &out, result]() {
-            this->grad += (1 - result * result) * out.grad;
+        out.backward = [this, result](Value* self) {
+            this->grad += (1 - result * result) * self->grad;
         };
 
         return out;
@@ -70,6 +90,6 @@ class Value {
         std::reverse(ordered_values.begin(), ordered_values.end());
       
         for (const Value* node : ordered_values)
-          const_cast<Value*>(node)->backward();
+          const_cast<Value*>(node)->backward(const_cast<Value*>(node));
     }
 };
