@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+#include <type_traits>
 #include <iostream>
 #include <set>
 #include <string>
@@ -7,89 +9,187 @@
 #include <functional>
 #include "topo.h"
 
-class Value {
-  public: 
-    float data; 
+struct ValueData {
+    float data;
     std::string label;
-    std::set<const Value*> prev; 
-    std::function<void(Value* self)> backward;
-    std::string op; 
-    float grad; 
+    std::set<std::shared_ptr<ValueData>> prev;
+    std::string op;
+    float grad = 0.0;
+    std::function<void()> backward = []() {};
 
-    Value(float d = 0,
-          std::string lab = "",
-          std::set<const Value*> children = {},
-          std::string operation = "",
-          float grad = 0.00
-        )
-        : data(d), label(lab), prev(children), backward([](Value* self) {}), op(operation), grad(grad) {}
+    ValueData(float data,
+              std::string label = "",
+              std::set<std::shared_ptr<ValueData>> prev = {},
+              std::string op = "",
+              float grad = 0.0)
+        : data(data), label(std::move(label)), prev(std::move(prev)), op(std::move(op)), grad(grad) {}
+};
 
-    static std::vector<std::unique_ptr<Value>>& pool() {
-        static std::vector<std::unique_ptr<Value>> storage;
-        return storage;
-    }
+class Value {
+    private:
+        std::shared_ptr<ValueData> internal_pointer;
 
-    friend std::ostream& operator<<(std::ostream& os, const Value& v) {
-        os << v.data;
-        return os;
-    }
+    public: 
+        Value(double data, std::string label = "")
+            : internal_pointer(std::make_shared<ValueData>(data, label)) {}
 
-    Value operator+(Value& other) {
-        Value out(data + other.data, "", { this, &other }, "+", 0);
-        out.backward = [this, &other](Value* self) {
-            // using += so that repeatedly used node will accumulate gradient
-            // same applies in other backward functions, not going to repeat comment
-            this->grad += 1.0 * self->grad;
-            other.grad += 1.0 * self->grad;
-        };
+        explicit Value(std::shared_ptr<ValueData> n) : internal_pointer(std::move(n)) {}
 
-        return out;
-    }
+        friend std::ostream& operator<<(std::ostream& os, const Value& v) {
+            os << v.internal_pointer->data;
+            return os;
+        }
 
-    // template<std::arithmetic T>
-    // Value operator+(T other) {
-    //     Value temp(other, "", {}, "", 0);
-    //     Value out(data + temp.data, "", { this, &temp }, "+", 0);
+        ValueData* operator->() const {
+            return internal_pointer.get();
+        }
+    
+        std::shared_ptr<ValueData> getPointer() const {
+            return internal_pointer;
+        }
 
-    //     out.backward = [this, &out, &temp]() {
-    //         // using += so that repeatedly used node will accumulate gradient
-    //         // same applies in other backward functions, not going to repeat comment
-    //         this->grad += 1.0 * out.grad;
-    //         temp.grad += 1.0 * out.grad;
-    //     };
+        /* begin addition operator implementation */
+        Value operator+(Value other) {
+            auto out = std::make_shared<ValueData>(
+                internal_pointer->data + other.internal_pointer->data,
+                "",
+                std::set<std::shared_ptr<ValueData>>{ internal_pointer, other.internal_pointer },
+                "+",
+                0.0
+            );
 
-    //     return out;
-    // }
+            out->backward = [this, other, out]() {
+                // using += so that repeatedly used node will accumulate gradient
+                // same applies in other backward functions, not going to repeat comment
+                this->internal_pointer->grad += 1.0 * out->grad;
+                other.internal_pointer->grad += 1.0 * out->grad;
+            };
 
-    Value operator*(Value& other) {
-        Value out(data * other.data, "", { this, &other }, "*", 0);
+            return Value(out);
+        }
 
-        out.backward = [this, &other](Value* self) {
-            this->grad += other.data * self->grad;
-            other.grad += this->data * self->grad;
-        };
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        Value operator+(T other) {
+            return add_value_number(*this, other);
+        }
 
-        return out;
-    }
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        friend Value operator+(T c, Value& v) {
+            return add_value_number(v, c);
+        }
+        /* end addition operator implementation */
 
-    Value tanh() {
-        float result = (std::exp(2 * data) - 1) / (std::exp(2 * data) + 1);
-        Value out(result, "", { this }, "tanh", 0);
+        /* begin multiplication operator implementation */
+        Value operator*(Value other) {
+            auto out = std::make_shared<ValueData>(
+                internal_pointer->data * other.internal_pointer->data,
+                "",
+                std::set<std::shared_ptr<ValueData>>{ internal_pointer, other.internal_pointer },
+                "*",
+                0.0
+            );
 
-        out.backward = [this, result](Value* self) {
-            this->grad += (1 - result * result) * self->grad;
-        };
+            out->backward = [this, other, out]() {
+                // using += so that repeatedly used node will accumulate gradient
+                // same applies in other backward functions, not going to repeat comment
+                this->internal_pointer->grad += other.internal_pointer->data * out->grad;
+                other.internal_pointer->grad += this->internal_pointer->grad * out->grad;
+            };
 
-        return out;
-    }
+            return Value(out);
+        }
 
-    void backprop() {
-        this->grad = 1.0;
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        Value operator*(T other) {
+            return multiply_value_number(*this, other);
+        }
 
-        std::vector<const Value*> ordered_values = build_topological_order(*this);
-        std::reverse(ordered_values.begin(), ordered_values.end());
-      
-        for (const Value* node : ordered_values)
-          const_cast<Value*>(node)->backward(const_cast<Value*>(node));
-    }
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        friend Value operator*(T c, Value& v) {
+            return multiply_value_number(v, c);
+        }
+        /* end multiplicaton operator implementation */
+
+        Value tanh() {
+            float result = (std::exp(2 * this->internal_pointer->data) - 1) / (std::exp(2 * this->internal_pointer->data) + 1);
+
+            auto out = std::make_shared<ValueData>(
+                result,
+                "",
+                std::set<std::shared_ptr<ValueData>>{ internal_pointer },
+                "tanh",
+                0.0
+            );
+
+            out->backward = [this, result, out]() {
+                this->internal_pointer->grad += (1 - result * result) * out->grad;
+            };
+
+            return Value(out);
+        }
+
+        void backprop() {
+            this->internal_pointer->grad = 1.0;
+
+            auto topo = build_topological_order(internal_pointer);
+            std::reverse(topo.begin(), topo.end());
+            
+            for (auto& node : topo)
+                node->backward();
+        }
+
+    private:
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        static Value add_value_number(Value& v, T other) {
+            auto other_pointer = std::make_shared<ValueData>(
+                other,
+                ""
+            );
+            auto out = std::make_shared<ValueData>(
+                other_pointer->data + v->data,
+                "",
+                std::set<std::shared_ptr<ValueData>>{ v.internal_pointer, other_pointer },
+                "+",
+                0.0
+            );
+
+            out->backward = [v, other_pointer, out]() {
+                // using += so that repeatedly used node will accumulate gradient
+                // same applies in other backward functions, not going to repeat comment
+                v->grad += 1.0 * out->grad;
+                other_pointer->grad += 1.0 * out->grad;
+            };
+
+            return Value(out);
+        }
+
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        static Value multiply_value_number(Value& v, T other) {
+            auto other_pointer = std::make_shared<ValueData>(
+                other,
+                ""
+            );
+            auto out = std::make_shared<ValueData>(
+                other_pointer->data * v->data,
+                "",
+                std::set<std::shared_ptr<ValueData>>{ v.internal_pointer, other_pointer },
+                "*",
+                0.0
+            );
+
+            out->backward = [v, other_pointer, out]() {
+                // using += so that repeatedly used node will accumulate gradient
+                // same applies in other backward functions, not going to repeat comment
+                v->grad += other_pointer->data * out->grad;
+                other_pointer->grad += v->data * out->grad;
+            };
+
+            return Value(out);
+        }
 };

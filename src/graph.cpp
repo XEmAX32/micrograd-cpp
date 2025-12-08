@@ -4,7 +4,7 @@
 #include "value.h"
 #include "graph.h"
 
-static void render_node(Agraph_t* graph, const Value* current_node_value, Agnode_t* parent_node) {
+static void render_node(Agraph_t* graph, const Value& current_node_value, Agnode_t* parent_node) {
   std::ostringstream ss;
   ss << current_node_value;
   char* current_node_value_name = strdup(ss.str().c_str());
@@ -13,7 +13,7 @@ static void render_node(Agraph_t* graph, const Value* current_node_value, Agnode
 
   std::ostringstream label_ss;
   label_ss << "{ " << current_node_value->label
-          << " | value: "  << *current_node_value
+          << " | value: "  << current_node_value
           << " | grad: "  << current_node_value->grad
           << " }";
   char* label = strdup(label_ss.str().c_str());
@@ -26,7 +26,7 @@ static void render_node(Agraph_t* graph, const Value* current_node_value, Agnode
   if(!current_node_value->op.empty()) {
     // make this node truly unique
     char name_buffer[64];
-    snprintf(name_buffer, sizeof(name_buffer), "op_%p", (void*)current_node_value);
+    snprintf(name_buffer, sizeof(name_buffer), "op_%p", static_cast<void*>(current_node_value.getPointer().get()));
     operation_node = agnode(graph, name_buffer, 1);
 
     agsafeset(operation_node, const_cast<char*>("label"), current_node_value->op.c_str(), const_cast<char*>(""));
@@ -37,8 +37,8 @@ static void render_node(Agraph_t* graph, const Value* current_node_value, Agnode
     agedge(graph, new_node, parent_node, 0, 1);
   }
 
-  for (const Value* child_node : current_node_value->prev) {
-    render_node(graph, child_node, operation_node ? operation_node : new_node);
+  for (const std::shared_ptr<ValueData>& child_node : current_node_value->prev) {
+    render_node(graph, Value(child_node), operation_node ? operation_node : new_node);
   }
 
 }
@@ -47,7 +47,7 @@ void render_graph(const Value& root_node) {
     GVC_t* gvc = gvContext();
     Agraph_t* graph = agopen(const_cast<char*>("GRAPH"), Agdirected, nullptr);
 
-    render_node(graph, &root_node, nullptr);
+    render_node(graph, root_node, nullptr);
 
     agsafeset(graph, (char*)"rankdir", (char*)"LR", (char*)"");
 

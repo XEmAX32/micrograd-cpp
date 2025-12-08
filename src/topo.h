@@ -2,6 +2,6 @@
 
 #include <vector>
 
-class Value;
+struct ValueData;
 
-std::vector<const Value*> build_topological_order(const Value& v);
+std::vector<std::shared_ptr<ValueData>> build_topological_order(const std::shared_ptr<ValueData>& root);

@@ -7,12 +7,19 @@
 int main() {
   Value a(-2.0, "a"); 
   Value b(3.0, "b");
-  Value d = a * b; d.label = "d";
-  Value e = a + b; e.label = "e";
-  Value f = d * e; f.label = "d";
-  f.backprop();
+  Value c = 1+a; c->label = "ciao";
+  Value d = 5; d->label = "d";
+  Value e = d.tanh(); e->label="e";
 
-  render_graph(f);
+
+  std::cout << e << std::endl;
+
+  // Value d = a * b; d.label = "d";
+  // Value e = a + b; e.label = "e";
+  // Value f = d * e; f.label = "d";
+  e.backprop();
+
+  render_graph(e);
 
   return 0;
 }

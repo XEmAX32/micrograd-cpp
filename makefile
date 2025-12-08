@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -O2 -Isrc -I/opt/homebrew/include/graphviz
+CXXFLAGS = -Wall -O2 -std=c++20 -Isrc -I/opt/homebrew/include/graphviz
 LDFLAGS = -L/opt/homebrew/lib -lgvc -lcgraph -lcdt
 DEPFLAGS = -MMD -MP
 
