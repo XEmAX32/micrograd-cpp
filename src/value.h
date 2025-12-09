@@ -81,6 +81,28 @@ class Value {
         }
         /* end addition operator implementation */
 
+        /* begin subtraction operator implementation */
+        Value operator-() {
+            return (*this) * -1;
+        }
+
+        Value operator-(Value other) {
+            return (*this) + (-other);
+        }
+
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        Value operator-(T other) {
+            return (*this) + (-other);
+        }
+
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        friend Value operator-(T other, Value val) {
+            return -val + other;
+        }
+        /* end subtraction operator implementation */
+
         /* begin multiplication operator implementation */
         Value operator*(Value other) {
             auto out = std::make_shared<ValueData>(
@@ -113,6 +135,83 @@ class Value {
             return multiply_value_number(v, c);
         }
         /* end multiplicaton operator implementation */
+
+        /* begin division operator implementation */
+
+        Value operator/(Value other) {
+            return (*this) * other.pow(-1);
+        }
+
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        Value operator/(T other) {
+            return (*this) * std::pow(other, -1);
+        }
+
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        friend Value operator/(T other, Value val) {
+            return val.pow(-1) * other;
+        }
+
+        /* end division operator implementation */
+
+        // Value operator/() {
+        //     return *(this)->pow(-1);
+        // }
+
+        // Value operator/(Value other) {
+        //     auto out = std::make_shared<ValueData>(
+        //         internal_pointer->data / other.internal_pointer->data,
+        //         "",
+        //         std::set<std::shared_ptr<ValueData>>{ internal_pointer, other.internal_pointer },
+        //         "/",
+        //         0.0
+        //     );
+
+        //     out->backward = [this, other, out]() {
+        //         // using += so that repeatedly used node will accumulate gradient
+        //         // same applies in other backward functions, not going to repeat comment
+        //         this->internal_pointer->grad += 1 / other.internal_pointer->data * out->grad;
+        //         other.internal_pointer->grad += this->internal_pointer->grad * out->grad;
+        //     };
+
+        //     return Value(out);
+        // }
+
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        Value pow(T exponent) {
+            auto out = std::make_shared<ValueData>(
+                std::pow(this->internal_pointer->data, exponent),
+                "",
+                std::set<std::shared_ptr<ValueData>>{ internal_pointer },
+                "pow",
+                0.0
+            );
+
+            out->backward = [this, out, exponent]() {
+                this->internal_pointer->grad += exponent * (std::pow(this->internal_pointer->data, exponent - 1)) * out->grad;
+            };
+
+            return Value(out);
+        }
+
+        Value exp() {
+            auto out = std::make_shared<ValueData>(
+                std::exp(this->internal_pointer->data),
+                "",
+                std::set<std::shared_ptr<ValueData>>{ internal_pointer },
+                "exp",
+                0.0
+            );
+
+            out->backward = [this, out]() {
+                this->internal_pointer->grad += out->data * out->grad;
+            };
+
+            return Value(out);
+        }
 
         Value tanh() {
             float result = (std::exp(2 * this->internal_pointer->data) - 1) / (std::exp(2 * this->internal_pointer->data) + 1);
