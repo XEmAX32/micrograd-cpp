@@ -1,6 +1,7 @@
 CXX = g++
-CXXFLAGS = -Wall -O2 -std=c++20 -Isrc -I/opt/homebrew/include/graphviz
-LDFLAGS = -L/opt/homebrew/lib -lgvc -lcgraph -lcdt
+CXXFLAGS = -Wall -O2 -std=c++20 -Wextra -Isrc -I/opt/homebrew/include/graphviz -fno-omit-frame-pointer \
+         -fsanitize=address,undefined
+LDFLAGS = -L/opt/homebrew/lib -lgvc -lcgraph -lcdt -fsanitize=address,undefined
 DEPFLAGS = -MMD -MP
 
 SRCDIR = src

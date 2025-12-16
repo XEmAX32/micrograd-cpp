@@ -10,18 +10,18 @@
 #include "topo.h"
 
 struct ValueData {
-    float data;
+    double data;
     std::string label;
     std::set<std::shared_ptr<ValueData>> prev;
     std::string op;
-    float grad = 0.0;
+    double grad = 0.0;
     std::function<void()> backward = []() {};
 
-    ValueData(float data,
+    ValueData(double data,
               std::string label = "",
               std::set<std::shared_ptr<ValueData>> prev = {},
               std::string op = "",
-              float grad = 0.0)
+              double grad = 0.0)
         : data(data), label(std::move(label)), prev(std::move(prev)), op(std::move(op)), grad(grad) {}
 };
 
@@ -30,8 +30,8 @@ class Value {
         std::shared_ptr<ValueData> internal_pointer;
 
     public: 
-        Value(double data, std::string label = "")
-            : internal_pointer(std::make_shared<ValueData>(data, label)) {}
+        Value(double data, std::string label = "", std::set<std::shared_ptr<ValueData>> prev = {}, std::string op = "", double grad = 0.0)
+            : internal_pointer(std::make_shared<ValueData>(data, label, prev, op, grad)) {}
 
         explicit Value(std::shared_ptr<ValueData> n) : internal_pointer(std::move(n)) {}
 
@@ -58,10 +58,10 @@ class Value {
                 0.0
             );
 
-            out->backward = [this, other, out]() {
+            out->backward = [a = internal_pointer, other, out]() {
                 // using += so that repeatedly used node will accumulate gradient
                 // same applies in other backward functions, not going to repeat comment
-                this->internal_pointer->grad += 1.0 * out->grad;
+                a->grad += 1.0 * out->grad;
                 other.internal_pointer->grad += 1.0 * out->grad;
             };
 
@@ -78,6 +78,18 @@ class Value {
             requires std::is_arithmetic_v<T>
         friend Value operator+(T c, Value& v) {
             return add_value_number(v, c);
+        }
+
+        Value& operator+=(const Value& other) {
+            *this = *this + other;
+            return *this;
+        }
+
+        template <typename T>
+            requires std::is_arithmetic_v<T>
+        Value& operator+=(const T other) {
+            *this = *this + other;
+            return *this;
         }
         /* end addition operator implementation */
 
@@ -113,11 +125,11 @@ class Value {
                 0.0
             );
 
-            out->backward = [this, other, out]() {
+            out->backward = [a = internal_pointer, b = other.internal_pointer, out]() {
                 // using += so that repeatedly used node will accumulate gradient
                 // same applies in other backward functions, not going to repeat comment
-                this->internal_pointer->grad += other.internal_pointer->data * out->grad;
-                other.internal_pointer->grad += this->internal_pointer->grad * out->grad;
+                a->grad += b->data * out->grad;
+                b->grad += a->data * out->grad;
             };
 
             return Value(out);
@@ -190,8 +202,8 @@ class Value {
                 0.0
             );
 
-            out->backward = [this, out, exponent]() {
-                this->internal_pointer->grad += exponent * (std::pow(this->internal_pointer->data, exponent - 1)) * out->grad;
+            out->backward = [a = internal_pointer, out, exponent]() {
+                a->grad += exponent * (std::pow(a->data, exponent - 1)) * out->grad;
             };
 
             return Value(out);
@@ -206,29 +218,18 @@ class Value {
                 0.0
             );
 
-            out->backward = [this, out]() {
-                this->internal_pointer->grad += out->data * out->grad;
+            out->backward = [a = internal_pointer, out]() {
+                a->grad += out->data * out->grad;
             };
 
             return Value(out);
         }
 
         Value tanh() {
-            float result = (std::exp(2 * this->internal_pointer->data) - 1) / (std::exp(2 * this->internal_pointer->data) + 1);
+            Value intermediate = (2 * (*this)).exp();
+            Value result = (intermediate - 1) / (intermediate + 1);
 
-            auto out = std::make_shared<ValueData>(
-                result,
-                "",
-                std::set<std::shared_ptr<ValueData>>{ internal_pointer },
-                "tanh",
-                0.0
-            );
-
-            out->backward = [this, result, out]() {
-                this->internal_pointer->grad += (1 - result * result) * out->grad;
-            };
-
-            return Value(out);
+            return result;
         }
 
         void backprop() {
